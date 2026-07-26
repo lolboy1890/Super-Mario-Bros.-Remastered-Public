@@ -3,7 +3,7 @@ name: Deploy Web Version
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 0 * * 0'  # Weekly on Sunday
+    - cron: '0 0 * * 0'
 
 permissions:
   contents: write
@@ -15,35 +15,45 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Create web-build directory
-        run: mkdir -p web-build
-
-      - name: Download latest release assets using GitHub API
+      - name: Download and setup web version
         run: |
-          # Get the latest release info
-          curl -s https://api.github.com/repos/JHDev2006/Super-Mario-Bros.-Remastered-Public/releases/latest > release.json
-          
-          # Extract download URLs for all assets
-          cat release.json | jq -r '.assets[] | "\(.name) \(.browser_download_url)"' > urls.txt
-          
-          cat urls.txt
-          
+          mkdir -p web-build
           cd web-build
           
-          # Download each file
-          while read line; do
-            if [ ! -z "$line" ]; then
-              filename=$(echo "$line" | awk '{print $1}')
-              url=$(echo "$line" | awk '{print $2}')
-              echo "Downloading: $filename from $url"
-              wget -q "$url" -O "$filename" && echo "✓ Downloaded $filename" || echo "✗ Failed to download $filename"
-            fi
-          done < ../urls.txt
+          # Base URL for the latest release
+          BASE_URL="https://github.com/JHDev2006/Super-Mario-Bros.-Remastered-Public/releases/download/1.1-rc2"
+          
+          echo "Downloading from: $BASE_URL"
+          
+          # Download all files
+          files=(
+            "SMB1R.html"
+            "SMB1R.js"
+            "SMB1R.audio.worklet.js"
+            "SMB1R.audio.position.worklet.js"
+            "merge.js"
+            "SMB1R.wasm.part1"
+            "SMB1R.wasm.part2"
+            "SMB1R.pck.part1"
+            "SMB1R.pck.part2"
+            "SMB1R.pck.part3"
+            "SMB1R.png"
+            "SMB1R.icon.png"
+            "SMB1R.apple-touch-icon.png"
+            "Super Mario Bros. (Europe).nes"
+          )
+          
+          for file in "${files[@]}"; do
+            echo "Downloading $file..."
+            wget -q "$BASE_URL/$file" -O "$file" 2>/dev/null && echo "✓ $file" || echo "✗ Failed: $file"
+          done
           
           cd ..
           echo ""
-          echo "Files in web-build:"
+          echo "Final file list:"
           ls -lh web-build/
+          echo ""
+          echo "Total files: $(ls web-build/ | wc -l)"
 
       - name: Commit and push changes
         run: |
@@ -51,7 +61,7 @@ jobs:
           git config --local user.name "GitHub Action"
           git add web-build/
           if ! git diff --quiet --cached; then
-            git commit -m "Update: Deploy latest web version"
+            git commit -m "chore: Update web build files"
             git push
           else
             echo "No changes to commit"
