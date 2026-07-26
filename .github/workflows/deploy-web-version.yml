@@ -18,49 +18,41 @@ jobs:
       - name: Create web-build directory
         run: mkdir -p web-build
 
-      - name: Download latest release assets
+      - name: Download latest release assets using GitHub API
         run: |
-          # Get the latest release download URL
-          RELEASE_URL=$(curl -s https://api.github.com/repos/JHDev2006/Super-Mario-Bros.-Remastered-Public/releases/latest | grep -oP '"browser_download_url": "\K[^"]*(?=SMB1R)' | head -1)
-          BASE_URL=$(echo $RELEASE_URL | sed 's|/SMB1R.*||')
+          # Get the latest release info
+          curl -s https://api.github.com/repos/JHDev2006/Super-Mario-Bros.-Remastered-Public/releases/latest > release.json
           
-          echo "Downloading from: $BASE_URL"
+          # Extract download URLs for all assets
+          cat release.json | jq -r '.assets[] | "\(.name) \(.browser_download_url)"' > urls.txt
           
-          # Download all necessary files
+          cat urls.txt
+          
           cd web-build
           
-          # HTML files
-          wget -q "$BASE_URL/SMB1R.html" || echo "SMB1R.html failed"
-          
-          # JavaScript files
-          wget -q "$BASE_URL/SMB1R.js" || echo "SMB1R.js failed"
-          wget -q "$BASE_URL/SMB1R.audio.worklet.js" || echo "audio worklet failed"
-          wget -q "$BASE_URL/SMB1R.audio.position.worklet.js" || echo "position worklet failed"
-          wget -q "$BASE_URL/merge.js" || echo "merge.js failed"
-          
-          # WASM files (split into parts)
-          wget -q "$BASE_URL/SMB1R.wasm.part1" || echo "wasm part1 failed"
-          wget -q "$BASE_URL/SMB1R.wasm.part2" || echo "wasm part2 failed"
-          
-          # PCK files (split into parts)
-          wget -q "$BASE_URL/SMB1R.pck.part1" || echo "pck part1 failed"
-          wget -q "$BASE_URL/SMB1R.pck.part2" || echo "pck part2 failed"
-          wget -q "$BASE_URL/SMB1R.pck.part3" || echo "pck part3 failed"
-          
-          # Image files
-          wget -q "$BASE_URL/SMB1R.png" || echo "SMB1R.png failed"
-          wget -q "$BASE_URL/SMB1R.icon.png" || echo "icon failed"
-          wget -q "$BASE_URL/SMB1R.apple-touch-icon.png" || echo "apple touch icon failed"
-          
-          # ROM file
-          wget -q "$BASE_URL/Super%20Mario%20Bros.%20(Europe).nes" -O "Super Mario Bros. (Europe).nes" || echo "ROM failed"
+          # Download each file
+          while read line; do
+            if [ ! -z "$line" ]; then
+              filename=$(echo "$line" | awk '{print $1}')
+              url=$(echo "$line" | awk '{print $2}')
+              echo "Downloading: $filename from $url"
+              wget -q "$url" -O "$filename" && echo "✓ Downloaded $filename" || echo "✗ Failed to download $filename"
+            fi
+          done < ../urls.txt
           
           cd ..
-          ls -la web-build/
+          echo ""
+          echo "Files in web-build:"
+          ls -lh web-build/
 
       - name: Commit and push changes
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add web-build/
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Update: Deploy latest web version" && git push)
+          if ! git diff --quiet --cached; then
+            git commit -m "Update: Deploy latest web version"
+            git push
+          else
+            echo "No changes to commit"
+          fi
