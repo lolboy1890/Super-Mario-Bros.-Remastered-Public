@@ -1,0 +1,66 @@
+name: Deploy Web Version
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * 0'  # Weekly on Sunday
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create web-build directory
+        run: mkdir -p web-build
+
+      - name: Download latest release assets
+        run: |
+          # Get the latest release download URL
+          RELEASE_URL=$(curl -s https://api.github.com/repos/JHDev2006/Super-Mario-Bros.-Remastered-Public/releases/latest | grep -oP '"browser_download_url": "\K[^"]*(?=SMB1R)' | head -1)
+          BASE_URL=$(echo $RELEASE_URL | sed 's|/SMB1R.*||')
+          
+          echo "Downloading from: $BASE_URL"
+          
+          # Download all necessary files
+          cd web-build
+          
+          # HTML files
+          wget -q "$BASE_URL/SMB1R.html" || echo "SMB1R.html failed"
+          
+          # JavaScript files
+          wget -q "$BASE_URL/SMB1R.js" || echo "SMB1R.js failed"
+          wget -q "$BASE_URL/SMB1R.audio.worklet.js" || echo "audio worklet failed"
+          wget -q "$BASE_URL/SMB1R.audio.position.worklet.js" || echo "position worklet failed"
+          wget -q "$BASE_URL/merge.js" || echo "merge.js failed"
+          
+          # WASM files (split into parts)
+          wget -q "$BASE_URL/SMB1R.wasm.part1" || echo "wasm part1 failed"
+          wget -q "$BASE_URL/SMB1R.wasm.part2" || echo "wasm part2 failed"
+          
+          # PCK files (split into parts)
+          wget -q "$BASE_URL/SMB1R.pck.part1" || echo "pck part1 failed"
+          wget -q "$BASE_URL/SMB1R.pck.part2" || echo "pck part2 failed"
+          wget -q "$BASE_URL/SMB1R.pck.part3" || echo "pck part3 failed"
+          
+          # Image files
+          wget -q "$BASE_URL/SMB1R.png" || echo "SMB1R.png failed"
+          wget -q "$BASE_URL/SMB1R.icon.png" || echo "icon failed"
+          wget -q "$BASE_URL/SMB1R.apple-touch-icon.png" || echo "apple touch icon failed"
+          
+          # ROM file
+          wget -q "$BASE_URL/Super%20Mario%20Bros.%20(Europe).nes" -O "Super Mario Bros. (Europe).nes" || echo "ROM failed"
+          
+          cd ..
+          ls -la web-build/
+
+      - name: Commit and push changes
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add web-build/
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Update: Deploy latest web version" && git push)
